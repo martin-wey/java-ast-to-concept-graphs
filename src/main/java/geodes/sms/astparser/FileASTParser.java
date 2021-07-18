@@ -17,6 +17,7 @@ import geodes.sms.astparser.graph.IdentifierNode;
 import geodes.sms.astparser.graph.IdentifierRelationEdge;
 
 import java.util.*;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 
@@ -26,22 +27,27 @@ public class FileASTParser {
 
     private final String filePath;
 
-    private Set<String> imports;
+    private final Logger logger;
 
     private List<MutableNetwork<IdentifierNode, IdentifierRelationEdge>> graphs;
 
     FileASTParser(CompilationUnit cu, String filePath) {
+        logger = Logger.getLogger(FileASTParser.class.getName());
         this.cu = cu;
         this.filePath = filePath;
-        initializeImports();
 
         List<Method> methods = cu.findAll(MethodDeclaration.class).stream()
                 .map(Method::new)
                 .collect(Collectors.toList());
     }
 
-    private void initializeImports() {
-        imports = cu.findAll(ImportDeclaration.class).stream()
+    /**
+     * Retrieve all importations made in the current file.
+     *
+     * @return a set containing the import names
+     */
+    private Set<String> retrieveImports() {
+        return cu.findAll(ImportDeclaration.class).stream()
                 .map(i -> i.getName().toString())
                 .collect(Collectors.toSet());
     }
@@ -82,7 +88,7 @@ public class FileASTParser {
             graphBuilder.setVarAssigns(retrieveVarAssigns());
             graphBuilder.checkRootRelations();
 
-            System.out.println(this);
+            //System.out.println(this);
         }
 
         /**

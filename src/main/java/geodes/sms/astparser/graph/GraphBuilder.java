@@ -7,7 +7,8 @@ import com.google.common.graph.NetworkBuilder;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.Collectors;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class GraphBuilder {
     /**
@@ -18,7 +19,12 @@ public class GraphBuilder {
      */
     private final MutableNetwork<IdentifierNode, IdentifierRelationEdge> graph;
 
+    private final Logger logger;
+
     public GraphBuilder(IdentifierNode methodNode) {
+        logger = Logger.getLogger(GraphBuilder.class.getName());
+        logger.info("Building graph for method: " + methodNode.getLabel());
+
         graph = NetworkBuilder.directed()
                 .allowsParallelEdges(true)
                 .build();
