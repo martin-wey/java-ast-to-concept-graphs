@@ -74,24 +74,26 @@ public class GraphBuilder {
      * @param variables list of pairs of string containing the variable name and its type.
      */
     public void setVariableNodes(List<Pair<String, String>> variables) {
-        variables.forEach(v -> {
-            if (!nodeAndFeatureInGraph(v.a, "var")) {
-                IdentifierNode varIdNode = new IdentifierNode(v.a, "var");
-                graph.addNode(varIdNode);
-                if (v.b != null && !nodeAndFeatureInGraph(v.b, "import")) {
-                    IdentifierNode varTypeNode = new IdentifierNode(v.b, "import");
-                    graph.addNode(varTypeNode);
-                    graph.addEdge(getMethodNode(), varTypeNode, new IdentifierRelationEdge("dependsOn", getMethodNode(), varTypeNode));
-                    graph.addEdge(varIdNode, varTypeNode, new IdentifierRelationEdge("type", varIdNode, varTypeNode));
-                } else if (v.b != null && nodeAndFeatureInGraph(v.b, "import")) {
-                    Optional<IdentifierNode> varTypeNode = getNodeWithFeature(v.b, "import");
-                    varTypeNode.ifPresent(typeNode ->
-                            graph.addEdge(varIdNode, typeNode, new IdentifierRelationEdge("type", varIdNode, typeNode))
-                    );
+        if (variables != null) {
+            variables.forEach(v -> {
+                if (!nodeAndFeatureInGraph(v.a, "var")) {
+                    IdentifierNode varIdNode = new IdentifierNode(v.a, "var");
+                    graph.addNode(varIdNode);
+                    if (v.b != null && !nodeAndFeatureInGraph(v.b, "import")) {
+                        IdentifierNode varTypeNode = new IdentifierNode(v.b, "import");
+                        graph.addNode(varTypeNode);
+                        graph.addEdge(getMethodNode(), varTypeNode, new IdentifierRelationEdge("dependsOn", getMethodNode(), varTypeNode));
+                        graph.addEdge(varIdNode, varTypeNode, new IdentifierRelationEdge("type", varIdNode, varTypeNode));
+                    } else if (v.b != null && nodeAndFeatureInGraph(v.b, "import")) {
+                        Optional<IdentifierNode> varTypeNode = getNodeWithFeature(v.b, "import");
+                        varTypeNode.ifPresent(typeNode ->
+                                graph.addEdge(varIdNode, typeNode, new IdentifierRelationEdge("type", varIdNode, typeNode))
+                        );
+                    }
+                    graph.addEdge(getMethodNode(), varIdNode, new IdentifierRelationEdge("defines", getMethodNode(), varIdNode));
                 }
-                graph.addEdge(getMethodNode(), varIdNode, new IdentifierRelationEdge("defines", getMethodNode(), varIdNode));
-            }
-        });
+            });
+        }
     }
 
     /**
@@ -100,28 +102,30 @@ public class GraphBuilder {
      * @param casts list of pairs of string containing the variable name and its casting type.
      */
     public void setVariableCasts(List<Pair<String, String>> casts) {
-        casts.stream().filter(Objects::nonNull).forEach(c -> {
-            Optional<IdentifierNode> var = getNodeWithFeature(c.a, "var");
-            IdentifierNode varNode;
-            if (var.isPresent()) {
-                varNode = var.get();
-            } else {
-                varNode = new IdentifierNode(c.a, "var");
-                graph.addNode(varNode);
-                graph.addEdge(getMethodNode(), varNode, new IdentifierRelationEdge("defines", getMethodNode(), varNode));
-            }
+        if (casts != null) {
+            casts.stream().filter(Objects::nonNull).forEach(c -> {
+                Optional<IdentifierNode> var = getNodeWithFeature(c.a, "var");
+                IdentifierNode varNode;
+                if (var.isPresent()) {
+                    varNode = var.get();
+                } else {
+                    varNode = new IdentifierNode(c.a, "var");
+                    graph.addNode(varNode);
+                    graph.addEdge(getMethodNode(), varNode, new IdentifierRelationEdge("defines", getMethodNode(), varNode));
+                }
 
-            Optional<IdentifierNode> cast = getNodeWithFeature(c.b, "import");
-            IdentifierNode castNode;
-            if (cast.isPresent()) {
-                castNode = cast.get();
-            } else {
-                castNode = new IdentifierNode(c.b, "import");
-                graph.addNode(castNode);
-                graph.addEdge(getMethodNode(), castNode, new IdentifierRelationEdge("dependsOn", getMethodNode(), castNode));
-            }
-            graph.addEdge(varNode, castNode, new IdentifierRelationEdge("type", varNode, castNode));
-        });
+                Optional<IdentifierNode> cast = getNodeWithFeature(c.b, "import");
+                IdentifierNode castNode;
+                if (cast.isPresent()) {
+                    castNode = cast.get();
+                } else {
+                    castNode = new IdentifierNode(c.b, "import");
+                    graph.addNode(castNode);
+                    graph.addEdge(getMethodNode(), castNode, new IdentifierRelationEdge("dependsOn", getMethodNode(), castNode));
+                }
+                graph.addEdge(varNode, castNode, new IdentifierRelationEdge("type", varNode, castNode));
+            });
+        }
     }
 
     /**
@@ -130,10 +134,12 @@ public class GraphBuilder {
      * @param calls list of method call names.
      */
     public void setCallNodes(List<String> calls) {
-        calls.forEach(c -> {
-            IdentifierNode callNode = new IdentifierNode(c, "call");
-            graph.addNode(callNode);
-        });
+        if (calls != null) {
+            calls.forEach(c -> {
+                IdentifierNode callNode = new IdentifierNode(c, "call");
+                graph.addNode(callNode);
+            });
+        }
     }
 
     /**
@@ -143,18 +149,20 @@ public class GraphBuilder {
      * @param varDependency list of variables having a dependency with a method call.
      */
     public void setCallNodesVarDependency(List<Pair<String, String>> varDependency) {
-        varDependency.forEach(v -> {
-            Optional<IdentifierNode> call = getNodeWithFeature(v.a, "call");
-            Optional<IdentifierNode> var = getNodeWithFeature(v.b, "var");
+        if (varDependency != null) {
+            varDependency.forEach(v -> {
+                Optional<IdentifierNode> call = getNodeWithFeature(v.a, "call");
+                Optional<IdentifierNode> var = getNodeWithFeature(v.b, "var");
 
-            if (call.isPresent() && var.isPresent()) {
-                IdentifierNode callNode = call.get();
-                IdentifierNode varNode = var.get();
-                if (!edgeBetweenNodes(varNode, callNode)) {
-                    graph.addEdge(varNode, callNode, new IdentifierRelationEdge("calls", varNode, callNode));
+                if (call.isPresent() && var.isPresent()) {
+                    IdentifierNode callNode = call.get();
+                    IdentifierNode varNode = var.get();
+                    if (!edgeBetweenNodes(varNode, callNode)) {
+                        graph.addEdge(varNode, callNode, new IdentifierRelationEdge("calls", varNode, callNode));
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 
     /**
@@ -164,89 +172,95 @@ public class GraphBuilder {
      * @param scopes list of calls as pairs of call name and call scope.
      */
     public void setCallScopes(List<Pair<String, String>> scopes) {
-        scopes.stream().filter(Objects::nonNull).forEach(s -> {
-            Optional<IdentifierNode> call = getNodeWithFeature(s.a, "call");
-            Optional<IdentifierNode> scope = getNode(s.b);
+        if (scopes != null) {
+            scopes.stream().filter(Objects::nonNull).forEach(s -> {
+                Optional<IdentifierNode> call = getNodeWithFeature(s.a, "call");
+                Optional<IdentifierNode> scope = getNode(s.b);
 
-            if (call.isPresent()) {
-                IdentifierNode callNode = call.get();
-                if (scope.isPresent()) {
-                    IdentifierNode scopeNode = scope.get();
-                    if (!edgeBetweenNodes(scopeNode, callNode)) {
+                if (call.isPresent()) {
+                    IdentifierNode callNode = call.get();
+                    if (scope.isPresent()) {
+                        IdentifierNode scopeNode = scope.get();
+                        if (!edgeBetweenNodes(scopeNode, callNode)) {
+                            graph.addEdge(scopeNode, callNode, new IdentifierRelationEdge("scope", scopeNode, callNode));
+                        }
+                    } else {
+                        IdentifierNode scopeNode = new IdentifierNode(s.b, "id");
                         graph.addEdge(scopeNode, callNode, new IdentifierRelationEdge("scope", scopeNode, callNode));
                     }
-                } else {
-                    IdentifierNode scopeNode = new IdentifierNode(s.b, "id");
-                    graph.addEdge(scopeNode, callNode, new IdentifierRelationEdge("scope", scopeNode, callNode));
                 }
-            }
-        });
+            });
+        }
     }
 
     /**
      * @param args
      */
     public void setCallArguments(List<Pair<String, Pair<String, String>>> args) {
-        args.forEach(arg -> {
-            Optional<IdentifierNode> call = getNodeWithFeature(arg.a, "call");
+        if (args != null) {
+            args.forEach(arg -> {
+                Optional<IdentifierNode> call = getNodeWithFeature(arg.a, "call");
 
-            Optional<IdentifierNode> argN;
-            if (arg.b.b.equals("call")) {
-                argN = getNodeWithFeature(arg.b.a, "call");
-            } else {
-                argN = getNodeWithFeature(arg.b.a, "param");
-                if (argN.isEmpty()) {
-                    argN = getNodeWithFeature(arg.b.a, "var");
+                Optional<IdentifierNode> argN;
+                if (arg.b.b.equals("call")) {
+                    argN = getNodeWithFeature(arg.b.a, "call");
+                } else {
+                    argN = getNodeWithFeature(arg.b.a, "param");
+                    if (argN.isEmpty()) {
+                        argN = getNodeWithFeature(arg.b.a, "var");
+                    }
                 }
-            }
 
-            IdentifierNode argNode = null;
-            if (argN.isEmpty() && !arg.b.b.equals("call")) {
-                argNode = new IdentifierNode(arg.b.a, "id");
-                graph.addNode(argNode);
-            } else if (argN.isPresent()) {
-                argNode = argN.get();
-            }
-            if (call.isPresent() && argNode != null) {
-                IdentifierNode callNode = call.get();
-                if (!edgeNamedBetweenNodes(callNode, argNode, "arg")) {
-                    graph.addEdge(callNode, argNode, new IdentifierRelationEdge("arg", callNode, argNode));
+                IdentifierNode argNode = null;
+                if (argN.isEmpty() && !arg.b.b.equals("call")) {
+                    argNode = new IdentifierNode(arg.b.a, "id");
+                    graph.addNode(argNode);
+                } else if (argN.isPresent()) {
+                    argNode = argN.get();
                 }
-            }
-        });
+                if (call.isPresent() && argNode != null) {
+                    IdentifierNode callNode = call.get();
+                    if (!edgeNamedBetweenNodes(callNode, argNode, "arg")) {
+                        graph.addEdge(callNode, argNode, new IdentifierRelationEdge("arg", callNode, argNode));
+                    }
+                }
+            });
+        }
     }
 
     /**
      * @param assigns
      */
     public void setVarAssigns(List<Pair<String, Pair<String, String>>> assigns) {
-        assigns.forEach(assign -> {
-            Optional<IdentifierNode> var = getNodeWithFeature(assign.a, "var");
+        if (assigns != null) {
+            assigns.forEach(assign -> {
+                Optional<IdentifierNode> var = getNodeWithFeature(assign.a, "var");
 
-            Optional<IdentifierNode> asgnN;
-            if (assign.b.b.equals("call")) {
-                asgnN = getNodeWithFeature(assign.b.a, "call");
-            } else {
-                asgnN = getNodeWithFeature(assign.b.a, "param");
-                if (asgnN.isEmpty()) {
-                    asgnN = getNodeWithFeature(assign.b.a, "var");
+                Optional<IdentifierNode> asgnN;
+                if (assign.b.b.equals("call")) {
+                    asgnN = getNodeWithFeature(assign.b.a, "call");
+                } else {
+                    asgnN = getNodeWithFeature(assign.b.a, "param");
+                    if (asgnN.isEmpty()) {
+                        asgnN = getNodeWithFeature(assign.b.a, "var");
+                    }
                 }
-            }
 
-            IdentifierNode assignNode = null;
-            if (asgnN.isEmpty() && !assign.b.b.equals("call")) {
-                assignNode = new IdentifierNode(assign.b.a, "id");
-                graph.addNode(assignNode);
-            } else if (asgnN.isPresent()) {
-                assignNode = asgnN.get();
-            }
-            if (var.isPresent() && assignNode != null) {
-                IdentifierNode varNode = var.get();
-                if (!edgeBetweenNodes(varNode, assignNode)) {
-                    graph.addEdge(varNode, assignNode, new IdentifierRelationEdge("relatedTo", varNode, assignNode));
+                IdentifierNode assignNode = null;
+                if (asgnN.isEmpty() && !assign.b.b.equals("call")) {
+                    assignNode = new IdentifierNode(assign.b.a, "id");
+                    graph.addNode(assignNode);
+                } else if (asgnN.isPresent()) {
+                    assignNode = asgnN.get();
                 }
-            }
-        });
+                if (var.isPresent() && assignNode != null) {
+                    IdentifierNode varNode = var.get();
+                    if (!edgeBetweenNodes(varNode, assignNode)) {
+                        graph.addEdge(varNode, assignNode, new IdentifierRelationEdge("relatedTo", varNode, assignNode));
+                    }
+                }
+            });
+        }
     }
 
     public void checkRootRelations() {

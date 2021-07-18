@@ -35,7 +35,7 @@ public class Main {
                             try {
                                 logger.info(String.format("Loading %s compilation unit...", filePath));
                                 CompilationUnit cu = StaticJavaParser.parse(Paths.get(
-                                "./src/main/resources/data/ByteSourceSmall.java")
+                                "./src/main/resources/data2/ByteSource.java")
                                 );
                                 FileASTParser fileParser = new FileASTParser(cu, filePath);
                             } catch (IOException e) {
