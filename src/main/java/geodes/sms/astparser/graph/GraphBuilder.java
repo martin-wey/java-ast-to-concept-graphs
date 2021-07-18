@@ -7,6 +7,7 @@ import com.google.common.graph.NetworkBuilder;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class GraphBuilder {
     /**
@@ -246,6 +247,17 @@ public class GraphBuilder {
                 }
             }
         });
+    }
+
+    public void checkRootRelations() {
+        IdentifierNode rootNode = getMethodNode();
+        graph.nodes().stream()
+                .filter(n -> !n.getFeature().equals("method"))
+                .forEach(n -> {
+                    if (!edgeBetweenNodes(rootNode, n)) {
+                        graph.addEdge(rootNode, n, new IdentifierRelationEdge("contains", rootNode, n));
+                    }
+                });
     }
 
     /**

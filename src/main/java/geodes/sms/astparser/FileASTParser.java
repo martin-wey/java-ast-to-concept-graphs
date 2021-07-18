@@ -80,6 +80,7 @@ public class FileASTParser {
             graphBuilder.setCallScopes(retrieveCallScopes());
             graphBuilder.setCallArguments(retrieveCallArgs());
             graphBuilder.setVarAssigns(retrieveVarAssigns());
+            graphBuilder.checkRootRelations();
 
             System.out.println(this);
         }
