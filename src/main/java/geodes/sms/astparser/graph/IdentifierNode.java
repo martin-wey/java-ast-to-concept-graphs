@@ -1,17 +1,16 @@
 package geodes.sms.astparser.graph;
 
 public class IdentifierNode {
+    private final int id;
+
     private final String label;
 
     private String feature;
 
-    public IdentifierNode(String label, String feature) {
+    public IdentifierNode(int id, String label, String feature) {
+        this.id = id;
         this.label = label;
         this.feature = feature;
-    }
-
-    IdentifierNode(String label) {
-        this.label = label;
     }
 
     public boolean equals(Object o) {
@@ -22,6 +21,8 @@ public class IdentifierNode {
         return false;
     }
 
+    public int getId() { return id; }
+
     public String getLabel() {
         return label;
     }
@@ -29,8 +30,6 @@ public class IdentifierNode {
     public String getFeature() {
         return feature;
     }
-
-    public void setFeature(String feature) { this.feature = feature; }
 
     public String toString() {
         return String.format("%s / %s", label, feature);

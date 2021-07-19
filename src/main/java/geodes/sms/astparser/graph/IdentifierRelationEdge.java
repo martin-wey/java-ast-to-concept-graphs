@@ -1,35 +1,28 @@
 package geodes.sms.astparser.graph;
 
 public class IdentifierRelationEdge {
+    private final int id;
+
     private final IdentifierNode sourceNode;
 
     private final IdentifierNode targetNode;
 
     private String value;
 
-    IdentifierRelationEdge(String value, IdentifierNode sourceNode, IdentifierNode targetNode) {
+    IdentifierRelationEdge(int id, String value, IdentifierNode sourceNode, IdentifierNode targetNode) {
+        this.id = id;
         this.value = value;
         this.sourceNode = sourceNode;
         this.targetNode = targetNode;
     }
 
+    public int getId() { return id; }
+
     public String getValue() {
         return value;
     }
 
-    public void setValue(String value) {
-        this.value = value;
-    }
-
     public String toString() {
         return String.format("%s --%s-> %s", sourceNode.getLabel(), value, targetNode.getLabel());
-    }
-
-    public IdentifierNode getTargetNode() {
-        return targetNode;
-    }
-
-    public IdentifierNode getSourceNode() {
-        return sourceNode;
     }
 }

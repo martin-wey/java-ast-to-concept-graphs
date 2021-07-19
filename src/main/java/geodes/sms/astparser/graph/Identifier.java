@@ -1,13 +1,11 @@
-package geodes.sms.astparser;
-
-import geodes.sms.astparser.graph.IdentifierNode;
+package geodes.sms.astparser.graph;
 
 public class Identifier {
     private final String id;
 
     private IdentifierNode node;
 
-    Identifier(String value) {
+    public Identifier(String value) {
         id = value;
     }
 

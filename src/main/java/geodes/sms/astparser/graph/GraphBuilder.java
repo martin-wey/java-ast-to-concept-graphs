@@ -7,7 +7,6 @@ import com.google.common.graph.NetworkBuilder;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class GraphBuilder {
@@ -19,17 +18,22 @@ public class GraphBuilder {
      */
     private final MutableNetwork<IdentifierNode, IdentifierRelationEdge> graph;
 
+    private int nodeCounter = 0;
+
+    private int edgeCounter = 0;
+
     private final Logger logger;
 
-    public GraphBuilder(IdentifierNode methodNode) {
+    public GraphBuilder(String methodName) {
         logger = Logger.getLogger(GraphBuilder.class.getName());
-        logger.info("Building graph for method: " + methodNode.getLabel());
+        logger.fine("Building graph for method: " + methodName);
 
         graph = NetworkBuilder.directed()
                 .allowsParallelEdges(true)
                 .build();
         // the root node is the method node
-        graph.addNode(methodNode);
+        graph.addNode(new IdentifierNode(nodeCounter, methodName, NodeTypeEnum.ROOT.name()));
+        nodeCounter++;
     }
 
     /**
@@ -39,10 +43,9 @@ public class GraphBuilder {
      */
     public void setExceptionNodes(List<String> exceptions) {
         exceptions.forEach(e -> {
-            IdentifierNode exceptionNode = new IdentifierNode(e, "import");
-            graph.addNode(exceptionNode);
+            IdentifierNode exceptionNode = createNode(e, NodeTypeEnum.IMPORT.name());
             // the method depends on the exception which is imported
-            graph.addEdge(getMethodNode(), exceptionNode, new IdentifierRelationEdge("dependsOn", getMethodNode(), exceptionNode));
+            createEdge(RelationEnum.DEPENDS_ON.name(), getMethodNode(), exceptionNode);
         });
     }
 
@@ -53,23 +56,19 @@ public class GraphBuilder {
      */
     public void setParameterNodes(List<Pair<String, String>> parameters) {
         parameters.forEach(p -> {
-            IdentifierNode paramIdNode = new IdentifierNode(p.a, "param");
-            graph.addNode(paramIdNode);
+            IdentifierNode paramIdNode = createNode(p.a, NodeTypeEnum.PARAM.name());
             // relation: method --param->
-            graph.addEdge(getMethodNode(), paramIdNode, new IdentifierRelationEdge("parameter", getMethodNode(), paramIdNode));
-            if (p.b != null && !nodeAndFeatureInGraph(p.b, "import")) {
+            createEdge(RelationEnum.PARAMETER.name(), getMethodNode(), paramIdNode);
+            if (p.b != null && !nodeAndFeatureInGraph(p.b, NodeTypeEnum.IMPORT.name())) {
                 // the type is an imported abstract type -> feature = import
-                IdentifierNode paramTypeNode = new IdentifierNode(p.b, "import");
-                graph.addNode(paramTypeNode);
+                IdentifierNode paramTypeNode = createNode(p.b, NodeTypeEnum.IMPORT.name());
                 // relation: method --dependsOn->
-                graph.addEdge(getMethodNode(), paramTypeNode, new IdentifierRelationEdge("dependsOn", getMethodNode(), paramTypeNode));
+                createEdge(RelationEnum.DEPENDS_ON.name(), getMethodNode(), paramTypeNode);
                 // relation: parameter --type->
-                graph.addEdge(paramIdNode, paramTypeNode, new IdentifierRelationEdge("type", paramIdNode, paramTypeNode));
-            } else if (p.b != null && nodeAndFeatureInGraph(p.b, "import")) {
-                Optional<IdentifierNode> varTypeNode = getNodeWithFeature(p.b, "import");
-                varTypeNode.ifPresent(node ->
-                    graph.addEdge(paramIdNode, node, new IdentifierRelationEdge("type", paramIdNode, node))
-                );
+                createEdge(RelationEnum.TYPE.name(), paramIdNode, paramTypeNode);
+            } else if (p.b != null && nodeAndFeatureInGraph(p.b, NodeTypeEnum.IMPORT.name())) {
+                Optional<IdentifierNode> varTypeNode = getNodeWithFeature(p.b, NodeTypeEnum.IMPORT.name());
+                varTypeNode.ifPresent(node -> createEdge(RelationEnum.TYPE.name(), paramIdNode, node));
             }
         });
     }
@@ -82,21 +81,17 @@ public class GraphBuilder {
     public void setVariableNodes(List<Pair<String, String>> variables) {
         if (variables != null) {
             variables.forEach(v -> {
-                if (!nodeAndFeatureInGraph(v.a, "var")) {
-                    IdentifierNode varIdNode = new IdentifierNode(v.a, "var");
-                    graph.addNode(varIdNode);
-                    if (v.b != null && !nodeAndFeatureInGraph(v.b, "import")) {
-                        IdentifierNode varTypeNode = new IdentifierNode(v.b, "import");
-                        graph.addNode(varTypeNode);
-                        graph.addEdge(getMethodNode(), varTypeNode, new IdentifierRelationEdge("dependsOn", getMethodNode(), varTypeNode));
-                        graph.addEdge(varIdNode, varTypeNode, new IdentifierRelationEdge("type", varIdNode, varTypeNode));
-                    } else if (v.b != null && nodeAndFeatureInGraph(v.b, "import")) {
-                        Optional<IdentifierNode> varTypeNode = getNodeWithFeature(v.b, "import");
-                        varTypeNode.ifPresent(typeNode ->
-                                graph.addEdge(varIdNode, typeNode, new IdentifierRelationEdge("type", varIdNode, typeNode))
-                        );
+                if (!nodeAndFeatureInGraph(v.a, NodeTypeEnum.VAR.name())) {
+                    IdentifierNode varIdNode = createNode(v.a, NodeTypeEnum.VAR.name());
+                    if (v.b != null && !nodeAndFeatureInGraph(v.b, NodeTypeEnum.IMPORT.name())) {
+                        IdentifierNode varTypeNode = createNode(v.b, NodeTypeEnum.IMPORT.name());
+                        createEdge(RelationEnum.DEPENDS_ON.name(), getMethodNode(), varTypeNode);
+                        createEdge(RelationEnum.TYPE.name(), varIdNode, varTypeNode);
+                    } else if (v.b != null && nodeAndFeatureInGraph(v.b, NodeTypeEnum.IMPORT.name())) {
+                        Optional<IdentifierNode> varTypeNode = getNodeWithFeature(v.b, NodeTypeEnum.IMPORT.name());
+                        varTypeNode.ifPresent(typeNode -> createEdge(RelationEnum.TYPE.name(), varIdNode, typeNode));
                     }
-                    graph.addEdge(getMethodNode(), varIdNode, new IdentifierRelationEdge("defines", getMethodNode(), varIdNode));
+                    createEdge(RelationEnum.DEFINES.name(), getMethodNode(), varIdNode);
                 }
             });
         }
@@ -110,26 +105,24 @@ public class GraphBuilder {
     public void setVariableCasts(List<Pair<String, String>> casts) {
         if (casts != null) {
             casts.stream().filter(Objects::nonNull).forEach(c -> {
-                Optional<IdentifierNode> var = getNodeWithFeature(c.a, "var");
+                Optional<IdentifierNode> var = getNodeWithFeature(c.a, NodeTypeEnum.VAR.name());
                 IdentifierNode varNode;
                 if (var.isPresent()) {
                     varNode = var.get();
                 } else {
-                    varNode = new IdentifierNode(c.a, "var");
-                    graph.addNode(varNode);
-                    graph.addEdge(getMethodNode(), varNode, new IdentifierRelationEdge("defines", getMethodNode(), varNode));
+                    varNode = createNode(c.a, NodeTypeEnum.VAR.name());
+                    createEdge(RelationEnum.DEFINES.name(), getMethodNode(), varNode);
                 }
 
-                Optional<IdentifierNode> cast = getNodeWithFeature(c.b, "import");
+                Optional<IdentifierNode> cast = getNodeWithFeature(c.b, NodeTypeEnum.IMPORT.name());
                 IdentifierNode castNode;
                 if (cast.isPresent()) {
                     castNode = cast.get();
                 } else {
-                    castNode = new IdentifierNode(c.b, "import");
-                    graph.addNode(castNode);
-                    graph.addEdge(getMethodNode(), castNode, new IdentifierRelationEdge("dependsOn", getMethodNode(), castNode));
+                    castNode = createNode(c.b, NodeTypeEnum.IMPORT.name());
+                    createEdge(RelationEnum.DEPENDS_ON.name(), getMethodNode(), castNode);
                 }
-                graph.addEdge(varNode, castNode, new IdentifierRelationEdge("type", varNode, castNode));
+                createEdge(RelationEnum.TYPE.name(), varNode, castNode);
             });
         }
     }
@@ -142,8 +135,8 @@ public class GraphBuilder {
     public void setCallNodes(List<String> calls) {
         if (calls != null) {
             calls.forEach(c -> {
-                IdentifierNode callNode = new IdentifierNode(c, "call");
-                graph.addNode(callNode);
+                graph.addNode(new IdentifierNode(nodeCounter, c, NodeTypeEnum.CALL.name()));
+                nodeCounter++;
             });
         }
     }
@@ -157,14 +150,14 @@ public class GraphBuilder {
     public void setCallNodesVarDependency(List<Pair<String, String>> varDependency) {
         if (varDependency != null) {
             varDependency.forEach(v -> {
-                Optional<IdentifierNode> call = getNodeWithFeature(v.a, "call");
-                Optional<IdentifierNode> var = getNodeWithFeature(v.b, "var");
+                Optional<IdentifierNode> call = getNodeWithFeature(v.a, NodeTypeEnum.CALL.name());
+                Optional<IdentifierNode> var = getNodeWithFeature(v.b, NodeTypeEnum.VAR.name());
 
                 if (call.isPresent() && var.isPresent()) {
                     IdentifierNode callNode = call.get();
                     IdentifierNode varNode = var.get();
                     if (!edgeBetweenNodes(varNode, callNode)) {
-                        graph.addEdge(varNode, callNode, new IdentifierRelationEdge("calls", varNode, callNode));
+                        createEdge(RelationEnum.CALLS.name(), varNode, callNode);
                     }
                 }
             });
@@ -180,7 +173,7 @@ public class GraphBuilder {
     public void setCallScopes(List<Pair<String, String>> scopes) {
         if (scopes != null) {
             scopes.stream().filter(Objects::nonNull).forEach(s -> {
-                Optional<IdentifierNode> call = getNodeWithFeature(s.a, "call");
+                Optional<IdentifierNode> call = getNodeWithFeature(s.a, NodeTypeEnum.CALL.name());
                 Optional<IdentifierNode> scope = getNode(s.b);
 
                 if (call.isPresent()) {
@@ -188,11 +181,11 @@ public class GraphBuilder {
                     if (scope.isPresent()) {
                         IdentifierNode scopeNode = scope.get();
                         if (!edgeBetweenNodes(scopeNode, callNode)) {
-                            graph.addEdge(scopeNode, callNode, new IdentifierRelationEdge("scope", scopeNode, callNode));
+                            createEdge(RelationEnum.SCOPE.name(), scopeNode, callNode);
                         }
                     } else {
-                        IdentifierNode scopeNode = new IdentifierNode(s.b, "id");
-                        graph.addEdge(scopeNode, callNode, new IdentifierRelationEdge("scope", scopeNode, callNode));
+                        IdentifierNode scopeNode = createNode(s.b, NodeTypeEnum.ID.name());
+                        createEdge(RelationEnum.SCOPE.name(), scopeNode, callNode);
                     }
                 }
             });
@@ -205,29 +198,28 @@ public class GraphBuilder {
     public void setCallArguments(List<Pair<String, Pair<String, String>>> args) {
         if (args != null) {
             args.forEach(arg -> {
-                Optional<IdentifierNode> call = getNodeWithFeature(arg.a, "call");
+                Optional<IdentifierNode> call = getNodeWithFeature(arg.a, NodeTypeEnum.CALL.name());
 
                 Optional<IdentifierNode> argN;
-                if (arg.b.b.equals("call")) {
-                    argN = getNodeWithFeature(arg.b.a, "call");
+                if (arg.b.b.equals(NodeTypeEnum.CALL.name())) {
+                    argN = getNodeWithFeature(arg.b.a, NodeTypeEnum.CALL.name());
                 } else {
-                    argN = getNodeWithFeature(arg.b.a, "param");
+                    argN = getNodeWithFeature(arg.b.a, NodeTypeEnum.PARAM.name());
                     if (argN.isEmpty()) {
-                        argN = getNodeWithFeature(arg.b.a, "var");
+                        argN = getNodeWithFeature(arg.b.a, NodeTypeEnum.VAR.name());
                     }
                 }
 
                 IdentifierNode argNode = null;
-                if (argN.isEmpty() && !arg.b.b.equals("call")) {
-                    argNode = new IdentifierNode(arg.b.a, "id");
-                    graph.addNode(argNode);
+                if (argN.isEmpty() && !arg.b.b.equals(NodeTypeEnum.CALL.name())) {
+                    argNode = createNode(arg.b.a, NodeTypeEnum.ID.name());
                 } else if (argN.isPresent()) {
                     argNode = argN.get();
                 }
                 if (call.isPresent() && argNode != null) {
                     IdentifierNode callNode = call.get();
-                    if (!edgeNamedBetweenNodes(callNode, argNode, "arg")) {
-                        graph.addEdge(callNode, argNode, new IdentifierRelationEdge("arg", callNode, argNode));
+                    if (!edgeNamedBetweenNodes(callNode, argNode, RelationEnum.ARG.name())) {
+                        createEdge(RelationEnum.ARG.name(), callNode, argNode);
                     }
                 }
             });
@@ -240,29 +232,28 @@ public class GraphBuilder {
     public void setVarAssigns(List<Pair<String, Pair<String, String>>> assigns) {
         if (assigns != null) {
             assigns.forEach(assign -> {
-                Optional<IdentifierNode> var = getNodeWithFeature(assign.a, "var");
+                Optional<IdentifierNode> var = getNodeWithFeature(assign.a, NodeTypeEnum.VAR.name());
 
                 Optional<IdentifierNode> asgnN;
-                if (assign.b.b.equals("call")) {
-                    asgnN = getNodeWithFeature(assign.b.a, "call");
+                if (assign.b.b.equals(NodeTypeEnum.CALL.name())) {
+                    asgnN = getNodeWithFeature(assign.b.a, NodeTypeEnum.CALL.name());
                 } else {
-                    asgnN = getNodeWithFeature(assign.b.a, "param");
+                    asgnN = getNodeWithFeature(assign.b.a, NodeTypeEnum.PARAM.name());
                     if (asgnN.isEmpty()) {
-                        asgnN = getNodeWithFeature(assign.b.a, "var");
+                        asgnN = getNodeWithFeature(assign.b.a, NodeTypeEnum.VAR.name());
                     }
                 }
 
                 IdentifierNode assignNode = null;
-                if (asgnN.isEmpty() && !assign.b.b.equals("call")) {
-                    assignNode = new IdentifierNode(assign.b.a, "id");
-                    graph.addNode(assignNode);
+                if (asgnN.isEmpty() && !assign.b.b.equals(NodeTypeEnum.CALL.name())) {
+                    assignNode = createNode(assign.b.a, NodeTypeEnum.ID.name());
                 } else if (asgnN.isPresent()) {
                     assignNode = asgnN.get();
                 }
                 if (var.isPresent() && assignNode != null) {
                     IdentifierNode varNode = var.get();
                     if (!edgeBetweenNodes(varNode, assignNode)) {
-                        graph.addEdge(varNode, assignNode, new IdentifierRelationEdge("relatedTo", varNode, assignNode));
+                        createEdge(RelationEnum.RELATED_TO.name(), varNode, assignNode);
                     }
                 }
             });
@@ -272,10 +263,10 @@ public class GraphBuilder {
     public void checkRootRelations() {
         IdentifierNode rootNode = getMethodNode();
         graph.nodes().stream()
-                .filter(n -> !n.getFeature().equals("method"))
+                .filter(n -> !n.getFeature().equals(NodeTypeEnum.ROOT.name()))
                 .forEach(n -> {
                     if (!edgeBetweenNodes(rootNode, n)) {
-                        graph.addEdge(rootNode, n, new IdentifierRelationEdge("contains", rootNode, n));
+                        createEdge(RelationEnum.CONTAINS.name(), rootNode, n);
                     }
                 });
     }
@@ -287,7 +278,7 @@ public class GraphBuilder {
      */
     public IdentifierNode getMethodNode() {
         Optional<IdentifierNode> method = graph.nodes().stream()
-                .filter(n -> n.getFeature().equals("method"))
+                .filter(n -> n.getFeature().equals(NodeTypeEnum.ROOT.name()))
                 .findAny();
         return method.orElse(null);
     }
@@ -325,7 +316,7 @@ public class GraphBuilder {
      */
     Optional<IdentifierNode> getNode(String label) {
         return graph.nodes().stream()
-                .filter(n -> n.getLabel().equals(label) && !n.getFeature().equals("method"))
+                .filter(n -> n.getLabel().equals(label) && !n.getFeature().equals(NodeTypeEnum.ROOT.name()))
                 .findAny();
     }
 
@@ -350,12 +341,16 @@ public class GraphBuilder {
         return graph.edgesConnecting(sourceNode, targetNode).stream().anyMatch(r -> r.getValue().equals(relationName));
     }
 
-    /**
-     * @param node
-     * @return
-     */
-    boolean hasIncidentEdge(IdentifierNode node) {
-        return !graph.incidentEdges(node).isEmpty();
+    IdentifierNode createNode(String name, String feat) {
+        IdentifierNode node = new IdentifierNode(nodeCounter, name, feat);
+        graph.addNode(node);
+        nodeCounter++;
+        return node;
+    }
+
+    void createEdge(String relation, IdentifierNode source, IdentifierNode target) {
+        graph.addEdge(source, target, new IdentifierRelationEdge(edgeCounter, relation, source, target));
+        edgeCounter++;
     }
 
     public MutableNetwork<IdentifierNode, IdentifierRelationEdge> getGraph() {
@@ -365,8 +360,8 @@ public class GraphBuilder {
     public String printGraph() {
         StringBuilder sb = new StringBuilder();
         sb.append("graph {\n");
-        graph.nodes().forEach(n -> sb.append(String.format("\tnode: %s\n", n)));
-        graph.edges().forEach(e -> sb.append(String.format("\n\tedge: %s", e)));
+        graph.nodes().forEach(n -> sb.append(String.format("\tnode: %s (id: %s)\n", n, n.getId())));
+        graph.edges().forEach(e -> sb.append(String.format("\n\tedge: %s (id: %s)", e, e.getId())));
         sb.append("\n}\n");
         return sb.toString();
     }

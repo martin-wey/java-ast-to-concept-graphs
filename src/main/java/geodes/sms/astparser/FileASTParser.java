@@ -1,7 +1,6 @@
 package geodes.sms.astparser;
 
 import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
@@ -12,9 +11,7 @@ import com.github.javaparser.utils.Pair;
 
 import com.google.common.graph.MutableNetwork;
 
-import geodes.sms.astparser.graph.GraphBuilder;
-import geodes.sms.astparser.graph.IdentifierNode;
-import geodes.sms.astparser.graph.IdentifierRelationEdge;
+import geodes.sms.astparser.graph.*;
 
 import java.util.*;
 import java.util.logging.Logger;
@@ -22,34 +19,30 @@ import java.util.stream.Collectors;
 
 
 public class FileASTParser {
-
-    private final CompilationUnit cu;
-
-    private final String filePath;
-
     private final Logger logger;
 
-    private List<MutableNetwork<IdentifierNode, IdentifierRelationEdge>> graphs;
+    private final List<String> methodContents = new ArrayList<>();
 
-    FileASTParser(CompilationUnit cu, String filePath) {
+    private final List<MutableNetwork<IdentifierNode, IdentifierRelationEdge>> graphs = new ArrayList<>();
+
+    FileASTParser(CompilationUnit cu) {
         logger = Logger.getLogger(FileASTParser.class.getName());
-        this.cu = cu;
-        this.filePath = filePath;
 
-        List<Method> methods = cu.findAll(MethodDeclaration.class).stream()
+        cu.findAll(MethodDeclaration.class).stream()
                 .map(Method::new)
-                .collect(Collectors.toList());
+                .forEach(m -> {
+                    graphs.add(m.graphBuilder.getGraph());
+                    methodContents.add(m.getCleanedMethodContent());
+                    m = null; // free memory
+                });
     }
 
-    /**
-     * Retrieve all importations made in the current file.
-     *
-     * @return a set containing the import names
-     */
-    private Set<String> retrieveImports() {
-        return cu.findAll(ImportDeclaration.class).stream()
-                .map(i -> i.getName().toString())
-                .collect(Collectors.toSet());
+    public List<MutableNetwork<IdentifierNode, IdentifierRelationEdge>> getGraphs() {
+        return graphs;
+    }
+
+    public List<String> getMethodContents() {
+        return methodContents;
     }
 
     class Method {
@@ -57,26 +50,16 @@ public class FileASTParser {
 
         private final String methodName;
 
-        private final Identifier method;
-
-        private List<Identifier> exceptions;
-
-        private List<TypedIdentifier> parameters;
-
-        private List<TypedIdentifier> variables;
-
-        private List<Identifier> calls;
-
-        private GraphBuilder graphBuilder;
+        private final GraphBuilder graphBuilder;
 
         Method(MethodDeclaration m) {
             methodData = m;
             methodName = m.getName().toString();
 
-            method = new Identifier(methodName);
-            method.setNode(new IdentifierNode(methodName, "method"));
+            Identifier method = new Identifier(methodName);
+            method.setNode(new IdentifierNode(0, methodName, NodeTypeEnum.ROOT.name()));
 
-            graphBuilder = new GraphBuilder(method.getNode());
+            graphBuilder = new GraphBuilder(methodName);
             graphBuilder.setExceptionNodes(retrieveExceptions());
             graphBuilder.setParameterNodes(retrieveParameters());
             graphBuilder.setVariableNodes(retrieveVariables());
@@ -88,13 +71,22 @@ public class FileASTParser {
             graphBuilder.setVarAssigns(retrieveVarAssigns());
             graphBuilder.checkRootRelations();
 
-            //System.out.println(this);
+            System.out.println(this);
+        }
+
+        /**
+         * Get the method content (javadoc, declaration and body) on a single line.
+         *
+         * @return the method content as a string
+         */
+        String getCleanedMethodContent() {
+            return methodData.toString().replaceAll("[^\\S ]+", " ");
         }
 
         /**
          * @return
          */
-        public List<String> retrieveExceptions() {
+        List<String> retrieveExceptions() {
             return methodData.getThrownExceptions().stream()
                     .map(Node::toString)
                     .collect(Collectors.toList());
@@ -103,7 +95,7 @@ public class FileASTParser {
         /**
          * @return
          */
-        public List<Pair<String, String>> retrieveParameters() {
+        List<Pair<String, String>> retrieveParameters() {
             return methodData.getParameters().stream()
                     .map(p -> {
                         Optional<SimpleName> paramType = p.getType().findFirst(SimpleName.class);
@@ -118,7 +110,7 @@ public class FileASTParser {
          *
          * @return list of all variables (name and type) appearing in the method body as pairs of strings.
          */
-        public List<Pair<String, String>> retrieveVariables() {
+        List<Pair<String, String>> retrieveVariables() {
             Optional<BlockStmt> body = methodData.getBody();
             if (body.isPresent()) {
                 BlockStmt bodyData = body.get();
@@ -135,7 +127,7 @@ public class FileASTParser {
         /**
          * @return
          */
-        public List<Pair<String, String>> retrieveCasts() {
+        List<Pair<String, String>> retrieveCasts() {
             Optional<BlockStmt> body = methodData.getBody();
             if (body.isPresent()) {
                 BlockStmt bodyData = body.get();
@@ -152,7 +144,7 @@ public class FileASTParser {
         /**
          * @return
          */
-        public List<String> retrieveCalls() {
+        List<String> retrieveCalls() {
             Optional<BlockStmt> body = methodData.getBody();
             if (body.isPresent()) {
                 BlockStmt bodyData = body.get();
@@ -166,7 +158,7 @@ public class FileASTParser {
         /**
          * @return
          */
-        public List<Pair<String, String>> retrieveCallVarDependency() {
+        List<Pair<String, String>> retrieveCallVarDependency() {
             Optional<BlockStmt> body = methodData.getBody();
             if (body.isPresent()) {
                 BlockStmt bodyData = body.get();
@@ -183,7 +175,7 @@ public class FileASTParser {
         /**
          * @return
          */
-        public List<Pair<String, String>> retrieveCallScopes() {
+        List<Pair<String, String>> retrieveCallScopes() {
             Optional<BlockStmt> body = methodData.getBody();
             if (body.isPresent()) {
                 BlockStmt bodyData = body.get();
@@ -206,7 +198,7 @@ public class FileASTParser {
         /**
          * @return
          */
-        public List<Pair<String, Pair<String, String>>> retrieveCallArgs() {
+        List<Pair<String, Pair<String, String>>> retrieveCallArgs() {
             Optional<BlockStmt> body = methodData.getBody();
             if (body.isPresent()) {
                 BlockStmt bodyData = body.get();
@@ -228,7 +220,7 @@ public class FileASTParser {
         /**
          * @return
          */
-        public List<Pair<String, Pair<String, String>>> retrieveVarAssigns() {
+        List<Pair<String, Pair<String, String>>> retrieveVarAssigns() {
             Optional<BlockStmt> body = methodData.getBody();
             if (body.isPresent()) {
                 BlockStmt bodyData = body.get();
