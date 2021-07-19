@@ -33,7 +33,6 @@ public class FileASTParser {
                 .forEach(m -> {
                     graphs.add(m.graphBuilder.getGraph());
                     methodContents.add(m.getCleanedMethodContent());
-                    m = null; // free memory
                 });
     }
 

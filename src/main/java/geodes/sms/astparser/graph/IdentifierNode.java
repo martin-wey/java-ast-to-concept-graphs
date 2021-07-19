@@ -5,7 +5,7 @@ public class IdentifierNode {
 
     private final String label;
 
-    private String feature;
+    private final String feature;
 
     public IdentifierNode(int id, String label, String feature) {
         this.id = id;

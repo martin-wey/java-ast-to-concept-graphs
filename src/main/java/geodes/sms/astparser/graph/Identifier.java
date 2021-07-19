@@ -9,11 +9,7 @@ public class Identifier {
         id = value;
     }
 
-    public String getId() { return id; }
-
     public void setNode(IdentifierNode node) { this.node = node; }
-
-    public IdentifierNode getNode() { return node; }
 
     public String toString() {
         if (node != null)

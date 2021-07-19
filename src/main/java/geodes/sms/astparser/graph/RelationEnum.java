@@ -13,7 +13,7 @@ public enum RelationEnum {
 
     private final int id;
 
-    private RelationEnum(int id) { this.id = id; }
+    RelationEnum(int id) { this.id = id; }
 
     public int getId() { return id; }
 }

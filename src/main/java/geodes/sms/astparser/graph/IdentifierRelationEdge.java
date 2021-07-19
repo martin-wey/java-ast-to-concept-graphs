@@ -7,7 +7,7 @@ public class IdentifierRelationEdge {
 
     private final IdentifierNode targetNode;
 
-    private String value;
+    private final String value;
 
     IdentifierRelationEdge(int id, String value, IdentifierNode sourceNode, IdentifierNode targetNode) {
         this.id = id;

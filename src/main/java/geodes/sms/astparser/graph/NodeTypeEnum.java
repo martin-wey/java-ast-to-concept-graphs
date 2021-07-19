@@ -10,7 +10,7 @@ public enum NodeTypeEnum {
 
     private final int id;
 
-    private NodeTypeEnum(int id) { this.id = id; }
+    NodeTypeEnum(int id) { this.id = id; }
 
     public int getId() { return id; }
 }
