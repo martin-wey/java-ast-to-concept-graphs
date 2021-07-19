@@ -64,6 +64,11 @@ public class Main {
                                     methodContentsBuffer.append(p);
                                     methodContentsBuffer.append("\n");
                                 });
+                                fileParser.getGraphs().forEach(g -> {
+                                    graphWriter.setGraph(g);
+                                    graphWriter.writeGraphToCSV();
+                                    graphWriter.setGraph(null);
+                                });
                             } catch (IOException e) {
                                 e.printStackTrace();
                             }

@@ -22,6 +22,10 @@ public class IdentifierRelationEdge {
         return value;
     }
 
+    public IdentifierNode getSourceNode() { return sourceNode; }
+
+    public IdentifierNode getTargetNode() { return targetNode; }
+
     public String toString() {
         return String.format("%s --%s-> %s", sourceNode.getLabel(), value, targetNode.getLabel());
     }
