@@ -2,17 +2,23 @@ package geodes.sms.astparser;
 
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
+import com.google.gson.Gson;
 import geodes.sms.astparser.graph.GraphToCSV;
 
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
@@ -30,8 +36,9 @@ public class Main {
         Logger logger = Logger.getLogger(Main.class.getName());
         logger.setLevel(Level.INFO);
 
-        String basePath = "./src/main/resources/data";
-        String outputDir = "./src/main/resources/output";
+        String basePath = args[0];
+        String outputDir = args[1];
+        String outputFileName = args[2];
 
         logger.info("Loading symbol resolver...");
         CombinedTypeSolver combinedTypeSolver = new CombinedTypeSolver();
@@ -42,43 +49,55 @@ public class Main {
         // StaticJavaParser.getConfiguration().setAttributeComments(false);
 
         GraphToCSV graphWriter = new GraphToCSV(outputDir);
-        StringBuffer methodContentsBuffer = new StringBuffer();
+        StringBuffer methodsBuffer = new StringBuffer();
 
         try {
-            Path methodFp = Paths.get(outputDir).resolve("methods.txt");
+            Path methodFp = Paths.get(outputDir).resolve(outputFileName);
             if (!Files.exists(methodFp)) {
                 Files.createFile(methodFp);
             }
 
+            Gson gson = new Gson();
+            AtomicInteger globalCounter = new AtomicInteger(0);
             Files.walk(Paths.get(basePath))
-                    .filter(Files::isRegularFile)
+                    .map(Path::toString)
+                    .filter(f -> f.endsWith(".jsonl"))
                     .forEach(f -> {
-                        String filePath = f.toString();
-                        if (filePath.endsWith(".java")) {
-                            try {
-                                logger.info(String.format("Loading %s compilation unit...", filePath));
-                                CompilationUnit cu = StaticJavaParser.parse(Paths.get(filePath));
-                                logger.info(String.format("Parsing file: %s", filePath));
-                                FileASTParser fileParser = new FileASTParser(cu);
-                                fileParser.getMethodContents().forEach(p -> {
-                                    methodContentsBuffer.append(p);
-                                    methodContentsBuffer.append("\n");
-                                });
-                                fileParser.getGraphs().forEach(g -> {
-                                    graphWriter.setGraph(g);
-                                    graphWriter.writeGraphToCSV();
-                                    graphWriter.setGraph(null);
-                                });
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
+                        logger.info(String.format("Parsing file: %s", f));
+                        try {
+                            List<String> lines = Files.readAllLines(Paths.get(f));
+                            logger.info(String.format("Number of methods to parse: %s", lines.size()));
+                            MethodASTParser parser = new MethodASTParser(lines.stream().map(line -> {
+                                try {
+                                    Map jsonl = gson.fromJson(line, Map.class);
+                                    MethodDeclaration method =  StaticJavaParser.parseMethodDeclaration(
+                                        jsonl.get("original_string").toString());
+                                    methodsBuffer.append(line);
+                                    methodsBuffer.append("\n");
+                                    return method;
+                                } catch (Exception ignored) { }
+                                return null;
+                            }).filter(Objects::nonNull).collect(Collectors.toList()));
+
+                            AtomicInteger counter = new AtomicInteger(0);
+                            logger.info("Exporting method graphs...");
+                            parser.getGraphs().forEach(g -> {
+                                graphWriter.setGraph(g);
+                                graphWriter.writeGraphToCSV();
+                                graphWriter.setGraph(null);
+                                counter.getAndIncrement();
+                            });
+                            logger.info(String.format("Number of parsed methods: %s", counter));
+                            globalCounter.set(globalCounter.get() + counter.get());
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
                     });
-
-            logger.info("Writing method contents in: " + methodFp);
+            logger.info(String.format("Total number of parsed methods: %s", globalCounter));
+            logger.info("Writing methods contents in: " + methodFp);
             Files.write(
                 methodFp,
-                String.valueOf(methodContentsBuffer).getBytes(),
+                String.valueOf(methodsBuffer).getBytes(),
                 StandardOpenOption.APPEND
             );
         } catch (IOException e) {

@@ -18,30 +18,21 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 
-public class FileASTParser {
+public class MethodASTParser {
     private final Logger logger;
-
-    private final List<String> methodContents = new ArrayList<>();
 
     private final List<MutableNetwork<IdentifierNode, IdentifierRelationEdge>> graphs = new ArrayList<>();
 
-    FileASTParser(CompilationUnit cu) {
-        logger = Logger.getLogger(FileASTParser.class.getName());
+    MethodASTParser(List<MethodDeclaration> methods) {
+        logger = Logger.getLogger(MethodASTParser.class.getName());
 
-        cu.findAll(MethodDeclaration.class).stream()
+        methods.stream()
                 .map(Method::new)
-                .forEach(m -> {
-                    graphs.add(m.graphBuilder.getGraph());
-                    methodContents.add(m.getCleanedMethodContent());
-                });
+                .forEach(m -> graphs.add(m.graphBuilder.getGraph()));
     }
 
     public List<MutableNetwork<IdentifierNode, IdentifierRelationEdge>> getGraphs() {
         return graphs;
-    }
-
-    public List<String> getMethodContents() {
-        return methodContents;
     }
 
     class Method {

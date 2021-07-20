@@ -29,6 +29,7 @@ public class GraphBuilder {
         logger.fine("Building graph for method: " + methodName);
 
         graph = NetworkBuilder.directed()
+                .allowsSelfLoops(true)
                 .allowsParallelEdges(true)
                 .build();
         // the root node is the method node
