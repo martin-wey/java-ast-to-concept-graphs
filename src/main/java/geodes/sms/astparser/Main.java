@@ -1,7 +1,6 @@
 package geodes.sms.astparser;
 
 import com.github.javaparser.StaticJavaParser;
-import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
@@ -87,6 +86,15 @@ public class Main {
                                 graphWriter.setGraph(null);
                                 counter.getAndIncrement();
                             });
+
+                            logger.info("Writing methods contents in: " + methodFp);
+                            Files.write(
+                                methodFp,
+                                String.valueOf(methodsBuffer).getBytes(),
+                                StandardOpenOption.APPEND
+                            );
+                            methodsBuffer.delete(0, methodsBuffer.length());
+
                             logger.info(String.format("Number of parsed methods: %s", counter));
                             globalCounter.set(globalCounter.get() + counter.get());
                         } catch (IOException e) {
@@ -94,12 +102,6 @@ public class Main {
                         }
                     });
             logger.info(String.format("Total number of parsed methods: %s", globalCounter));
-            logger.info("Writing methods contents in: " + methodFp);
-            Files.write(
-                methodFp,
-                String.valueOf(methodsBuffer).getBytes(),
-                StandardOpenOption.APPEND
-            );
         } catch (IOException e) {
             e.printStackTrace();
         }
