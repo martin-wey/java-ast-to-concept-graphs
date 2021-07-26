@@ -5,6 +5,7 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
+import com.github.javaparser.utils.Pair;
 import com.google.gson.Gson;
 import geodes.sms.astparser.graph.GraphToCSV;
 
@@ -23,6 +24,8 @@ import java.util.logging.LogManager;
 import java.util.logging.Logger;
 
 public class Main {
+    private static final int maxNodes = 100;
+
     public static void main(String[] args) {
         InputStream stream = Main.class.getClassLoader().
                 getResourceAsStream("logging.properties");
@@ -66,25 +69,32 @@ public class Main {
                         try {
                             List<String> lines = Files.readAllLines(Paths.get(f));
                             logger.info(String.format("Number of methods to parse: %s", lines.size()));
-                            MethodASTParser parser = new MethodASTParser(lines.stream().map(line -> {
+
+                            List<Pair<String, MethodDeclaration>> methods = lines.stream().map(line -> {
                                 try {
                                     Map jsonl = gson.fromJson(line, Map.class);
-                                    MethodDeclaration method =  StaticJavaParser.parseMethodDeclaration(
-                                        jsonl.get("original_string").toString());
-                                    methodsBuffer.append(line);
-                                    methodsBuffer.append("\n");
-                                    return method;
+                                    return new Pair<>(
+                                        line,
+                                        StaticJavaParser.parseMethodDeclaration(jsonl.get("original_string").toString())
+                                    );
                                 } catch (Exception ignored) { }
                                 return null;
-                            }).filter(Objects::nonNull).collect(Collectors.toList()));
+                            }).filter(Objects::nonNull).collect(Collectors.toList());
+                            MethodASTParser parser = new MethodASTParser(methods);
 
                             AtomicInteger counter = new AtomicInteger(0);
                             logger.info("Exporting method graphs...");
-                            parser.getGraphs().forEach(g -> {
-                                graphWriter.setGraph(g);
-                                graphWriter.writeGraphToCSV();
-                                graphWriter.setGraph(null);
-                                counter.getAndIncrement();
+                            parser.getMethodGraphs().forEach(g -> {
+                                if (g.b.nodes().size() < maxNodes) {
+                                    graphWriter.setGraph(g.b);
+                                    graphWriter.writeGraphToCSV();
+                                    graphWriter.setGraph(null);
+
+                                    methodsBuffer.append(g.a);
+                                    methodsBuffer.append("\n");
+
+                                    counter.getAndIncrement();
+                                }
                             });
 
                             logger.info("Writing methods contents in: " + methodFp);
