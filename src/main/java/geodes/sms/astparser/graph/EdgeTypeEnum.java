@@ -1,19 +1,17 @@
 package geodes.sms.astparser.graph;
 
-public enum RelationEnum {
+public enum EdgeTypeEnum {
     DEPENDS_ON(0),
     PARAMETER(1),
     TYPE(2),
     DEFINES(3),
-    CALLS(4),
-    SCOPE(5),
-    ARG(6),
-    RELATED_TO(7),
-    CONTAINS(8);
+    SCOPE(4),
+    ARG(5),
+    CONTAINS(6);
 
     private final int id;
 
-    RelationEnum(int id) { this.id = id; }
+    EdgeTypeEnum(int id) { this.id = id; }
 
     public int getId() { return id; }
 }

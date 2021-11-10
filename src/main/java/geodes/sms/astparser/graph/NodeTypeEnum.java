@@ -1,7 +1,7 @@
 package geodes.sms.astparser.graph;
 
 public enum NodeTypeEnum {
-    ROOT(0),
+    METHOD(0),
     PARAM(1),
     IMPORT(2),
     VAR(3),

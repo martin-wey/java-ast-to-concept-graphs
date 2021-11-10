@@ -4,6 +4,8 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.*;
+import com.github.javaparser.ast.nodeTypes.NodeWithIdentifier;
+import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.ast.stmt.BlockStmt;
 
 import com.github.javaparser.utils.Pair;
@@ -13,8 +15,6 @@ import com.google.common.graph.MutableNetwork;
 import geodes.sms.astparser.graph.*;
 
 import java.util.*;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 
 public class MethodASTParser {
@@ -41,199 +41,165 @@ public class MethodASTParser {
 
         Method(MethodDeclaration m) {
             methodData = m;
-            methodName = m.getName().toString();
+            methodName = m.getNameAsString();
 
-            Identifier method = new Identifier(methodName);
-            method.setNode(new IdentifierNode(0, methodName, NodeTypeEnum.ROOT.name()));
-
-            graphBuilder = new GraphBuilder(methodName);
-            graphBuilder.setExceptionNodes(retrieveExceptions());
-            graphBuilder.setParameterNodes(retrieveParameters());
-            graphBuilder.setVariableNodes(retrieveVariables());
-            // graphBuilder.setVariableCasts(retrieveCasts());
-            graphBuilder.setCallNodes(retrieveCalls());
-            graphBuilder.setCallNodesVarDependency(retrieveCallVarDependency());
-            graphBuilder.setCallScopes(retrieveCallScopes());
-            graphBuilder.setCallArguments(retrieveCallArgs());
-            graphBuilder.setVarAssigns(retrieveVarAssigns());
-            graphBuilder.checkRootRelations();
+            graphBuilder = new GraphBuilder(methodName, methodData.hashCode());
+            initMethodParametersNodes();
+            initMethodIdentifiersNodes();
+            initVarTypeEdges();
+            initCallsScopes();
+            initVarDependency();
+            initCallsArgs();
+            initVarAssigns();
+            graphBuilder.checkUnconnectedNodes();
+            System.out.println(graphBuilder);
         }
 
-        /**
-         * Get the method content (javadoc, declaration and body) on a single line.
-         *
-         * @return the method content as a string
-         */
-        String getCleanedMethodContent() {
-            return methodData.toString().replaceAll("[^\\S ]+", " ");
+        void initMethodParametersNodes() {
+            methodData.getParameters()
+                    .forEach(p -> {
+                        graphBuilder.addNode(p.getNameAsString().hashCode(), p.getNameAsString(), NodeTypeEnum.PARAM.name());
+                        if (!graphBuilder.nodeExists(p.getType().hashCode())) {
+                            graphBuilder.addNode(p.getTypeAsString().hashCode(), p.getTypeAsString(), NodeTypeEnum.IMPORT.name());
+                        }
+                        Optional<IdentifierNode> param = graphBuilder.getNode(p.getNameAsString().hashCode());
+                        Optional<IdentifierNode> type = graphBuilder.getNode(p.getTypeAsString().hashCode());
+                        param.ifPresent(node -> {
+                            type.ifPresent(identifierNode -> graphBuilder.addEdge(EdgeTypeEnum.TYPE.name(), node, identifierNode));
+                            Optional<IdentifierNode> method = graphBuilder.getNode(methodData.hashCode());
+                            method.ifPresent(identifierNode -> graphBuilder.addEdge(EdgeTypeEnum.PARAMETER.name(), identifierNode, param.get()));
+                        });
+                    });
         }
 
-        /**
-         * @return
-         */
-        List<String> retrieveExceptions() {
-            return methodData.getThrownExceptions().stream()
-                    .map(Node::toString)
-                    .filter(this::isValidIdentifierName)
-                    .collect(Collectors.toList());
-        }
-
-        /**
-         * @return
-         */
-        List<Pair<String, String>> retrieveParameters() {
-            return methodData.getParameters().stream()
-                    .filter(p -> isValidIdentifierName(p.getNameAsString()))
-                    .map(p -> {
-                        Optional<SimpleName> paramType = p.getType().findFirst(SimpleName.class);
-                        return paramType.map(simpleName -> new Pair<>(
-                                p.getNameAsString(),
-                                simpleName.toString())).orElseGet(() -> new Pair<>(p.getNameAsString(), null));
-                    }).collect(Collectors.toList());
-        }
-
-        /**
-         * Retrieve all variables and their corresponding types declared in the body of the method.
-         *
-         * @return list of all variables (name and type) appearing in the method body as pairs of strings.
-         */
-        List<Pair<String, String>> retrieveVariables() {
+        void initMethodIdentifiersNodes() {
             Optional<BlockStmt> body = methodData.getBody();
             if (body.isPresent()) {
                 BlockStmt bodyData = body.get();
-                return bodyData.findAll(VariableDeclarator.class).stream()
-                        .filter(v -> isValidIdentifierName(v.getNameAsString()))
-                        .map(v -> {
-                            Optional<SimpleName> varType = v.getType().findFirst(SimpleName.class);
-                            return varType.map(simpleName -> new Pair<>(
-                                    v.getNameAsString(),
-                                    simpleName.toString())).orElseGet(() -> new Pair<>(v.getNameAsString(), null));
-                        }).collect(Collectors.toList());
-            } return null;
+                bodyData.findAll(Node.class).stream()
+                        .filter(n -> n instanceof NodeWithIdentifier).distinct()
+                        .filter(i -> !graphBuilder.nodeExists(((NodeWithIdentifier<?>) i).getId().hashCode()))
+                        .forEach(i -> {
+                            if (i.getParentNode().isPresent()) {
+                                switch (i.getParentNode().get().getClass().getSimpleName()) {
+                                    case "ClassOrInterfaceType":
+                                        graphBuilder.addNode(i.toString().hashCode(), i.toString(), NodeTypeEnum.IMPORT.name());
+                                        break;
+                                    case "VariableDeclarator":
+                                        graphBuilder.addNode(i.toString().hashCode(), i.toString(), NodeTypeEnum.VAR.name());
+                                        Optional<IdentifierNode> method = graphBuilder.getNode(methodData.hashCode());
+                                        Optional<IdentifierNode> var = graphBuilder.getNode(i.toString().hashCode());
+                                        if (method.isPresent() && var.isPresent()) {
+                                            graphBuilder.addEdge(EdgeTypeEnum.DEFINES.name(), method.get(), var.get());
+                                        }
+                                        break;
+                                    case "MethodCallExpr":
+                                        graphBuilder.addNode(i.toString().hashCode(), i.toString(), NodeTypeEnum.CALL.name());
+                                        break;
+                                    case "NameExpr":
+                                        graphBuilder.addNode(i.toString().hashCode(), i.toString(), NodeTypeEnum.ID.name());
+                                        break;
+                                    default:
+                                        break;
+                                }
+                            }
+                        });
+            }
         }
 
-        /**
-         * @return
-         */
-        List<Pair<String, String>> retrieveCasts() {
+        void initVarTypeEdges() {
             Optional<BlockStmt> body = methodData.getBody();
             if (body.isPresent()) {
                 BlockStmt bodyData = body.get();
-                return bodyData.findAll(CastExpr.class).stream()
-                    .map(c -> {
-                        Optional<SimpleName> castType = c.getType().findFirst(SimpleName.class);
-                        System.out.println(c);
-                        return castType.map(simpleName -> new Pair<>(
-                                c.getExpression().toString(),
-                                simpleName.toString())).orElse(null);
-                    }).collect(Collectors.toList());
-            } return null;
+                bodyData.findAll(VariableDeclarator.class)
+                        .forEach(n -> {
+                            Optional<IdentifierNode> var = graphBuilder.getNode(n.getNameAsString().hashCode());
+                            Optional<IdentifierNode> type = graphBuilder.getNode(n.getTypeAsString().hashCode());
+                            if (var.isPresent() && type.isPresent()) {
+                                graphBuilder.addEdge(EdgeTypeEnum.TYPE.name(), var.get(), type.get());
+                            }
+                        });
+            }
         }
 
-        /**
-         * @return
-         */
-        List<String> retrieveCalls() {
+        void initCallsScopes() {
             Optional<BlockStmt> body = methodData.getBody();
             if (body.isPresent()) {
                 BlockStmt bodyData = body.get();
-                return bodyData.findAll(MethodCallExpr.class).stream()
-                        .map(MethodCallExpr::getNameAsString)
-                        .distinct()
-                        .filter(this::isValidIdentifierName)
-                        .collect(Collectors.toList());
-            } return null;
-        }
-
-        /**
-         * @return
-         */
-        List<Pair<String, String>> retrieveCallVarDependency() {
-            Optional<BlockStmt> body = methodData.getBody();
-            if (body.isPresent()) {
-                BlockStmt bodyData = body.get();
-                return bodyData.findAll(VariableDeclarator.class).stream()
-                        .filter(v -> isValidIdentifierName(v.getNameAsString()))
-                        .map(v -> {
-                            Optional<MethodCallExpr> call = v.findAll(MethodCallExpr.class).stream().findFirst();
-                            return call.filter(c -> isValidIdentifierName(c.getNameAsString()))
-                                    .map(callNode -> new Pair<>(
-                                        callNode.getNameAsString(),
-                                        v.getNameAsString())).orElse(null);
-                        }).filter(Objects::nonNull).collect(Collectors.toList());
-            } return null;
-        }
-
-        /**
-         * @return
-         */
-        List<Pair<String, String>> retrieveCallScopes() {
-            Optional<BlockStmt> body = methodData.getBody();
-            if (body.isPresent()) {
-                BlockStmt bodyData = body.get();
-                return bodyData.findAll(MethodCallExpr.class).stream()
-                        .map(m -> {
-                            Optional<Expression> scope = m.getScope();
+                bodyData.findAll(MethodCallExpr.class)
+                        .forEach(n -> {
+                            Optional<Expression> scope = n.getScope();
                             if (scope.isPresent()) {
                                 Expression s = scope.get();
                                 // remove element between parentheses to avoid to match previous
-                                //   method call arguments as part of the scope of the current method call
+                                //   method call arguments in the scope of the current method call
                                 List<String> sElement = Arrays.asList(
                                         s.toString().replaceAll("\\(.*?\\)", "").split("\\."));
                                 String parsedScope = sElement.get(sElement.size() - 1);
-                                if (isValidIdentifierName(m.getNameAsString()) && isValidIdentifierName(parsedScope))
-                                    return new Pair<>(m.getNameAsString(), parsedScope);
+                                Optional<IdentifierNode> call = graphBuilder.getNode(n.getNameAsString().hashCode());
+                                Optional<IdentifierNode> scopeNode = graphBuilder.getNode(parsedScope.hashCode());
+                                if (scopeNode.isPresent() && call.isPresent()) {
+                                    graphBuilder.addEdge(EdgeTypeEnum.SCOPE.name(), call.get(), scopeNode.get());
+                                }
                             }
-                            return null;
-                        }).filter(Objects::nonNull).collect(Collectors.toList());
-            } return null;
+                        });
+            }
         }
 
-        /**
-         * @return
-         */
-        List<Pair<String, Pair<String, String>>> retrieveCallArgs() {
+        void initVarDependency() {
             Optional<BlockStmt> body = methodData.getBody();
             if (body.isPresent()) {
                 BlockStmt bodyData = body.get();
-                return bodyData.findAll(MethodCallExpr.class).stream()
-                        .flatMap(m -> m.getArguments().stream()
-                                .map(a -> {
-                                    if (a instanceof MethodCallExpr && isValidIdentifierName(((MethodCallExpr) a).getNameAsString())) {
-                                        Pair<String, String> arg = new Pair<>(((MethodCallExpr) a).getNameAsString(), "call");
-                                        return new Pair<>(m.getNameAsString(), arg);
-                                    } else if (a instanceof NameExpr && isValidIdentifierName(a.toString())) {
-                                        Pair<String, String> arg = new Pair<>(a.toString(), "var");
-                                        return new Pair<>(m.getNameAsString(), arg);
-                                    } return null;
-                                }).filter(Objects::nonNull)
-                        ).collect(Collectors.toList());
-            } return null;
+                bodyData.findAll(VariableDeclarator.class)
+                        .forEach(n -> {
+                            Optional<Expression> varInit = n.getInitializer();
+                            varInit.ifPresent(expression -> expression.findAll(Node.class).stream()
+                                    .filter(m -> m instanceof NodeWithIdentifier).distinct()
+                                    .filter(m -> ((NodeWithIdentifier<?>) m).getId().hashCode() != n.getNameAsString().hashCode())
+                                    .forEach(m -> {
+                                        Optional<IdentifierNode> var = graphBuilder.getNode(n.getNameAsString().hashCode());
+                                        Optional<IdentifierNode> dep = graphBuilder.getNode(((NodeWithIdentifier<?>) m).getId().hashCode());
+                                        if (var.isPresent() && dep.isPresent()) {
+                                            graphBuilder.addEdge(EdgeTypeEnum.DEPENDS_ON.name(), var.get(), dep.get());
+                                        }
+                                    }));
+
+                        });
+            }
         }
 
-        /**
-         * @return
-         */
-        List<Pair<String, Pair<String, String>>> retrieveVarAssigns() {
+        void initCallsArgs() {
             Optional<BlockStmt> body = methodData.getBody();
             if (body.isPresent()) {
                 BlockStmt bodyData = body.get();
-                return bodyData.findAll(AssignExpr.class).stream().map(e -> {
-                    if (e.getTarget() instanceof NameExpr) {
-                        if (e.getValue() instanceof MethodCallExpr && isValidIdentifierName(((MethodCallExpr) e.getValue()).getNameAsString())) {
-                            Pair<String, String> value = new Pair<>(((MethodCallExpr) e.getValue()).getNameAsString(), "call");
-                            return new Pair<>(e.getTarget().toString(), value);
-                        } else if (e.getValue() instanceof NameExpr && isValidIdentifierName(e.getValue().toString())) {
-                            Pair<String, String> value = new Pair<>(e.getValue().toString(), "var");
-                            return new Pair<>(e.getTarget().toString(), value);
+                bodyData.findAll(MethodCallExpr.class).forEach(n -> {
+                           n.getArguments().stream()
+                                   .filter(m -> m instanceof MethodCallExpr || m instanceof NameExpr)
+                                   .forEach(m -> {
+                                       Optional<IdentifierNode> call = graphBuilder.getNode(n.getNameAsString().hashCode());
+                                       Optional<IdentifierNode> arg = graphBuilder.getNode(((NodeWithSimpleName<?>) m).getNameAsString().hashCode());
+                                       if (call.isPresent() && arg.isPresent()) {
+                                           graphBuilder.addEdge(EdgeTypeEnum.ARG.name(), call.get(), arg.get());
+                                       }
+                                   });
+                        });
+            }
+        }
+
+        void initVarAssigns() {
+            Optional<BlockStmt> body = methodData.getBody();
+            if (body.isPresent()) {
+                BlockStmt bodyData = body.get();
+                bodyData.findAll(AssignExpr.class).forEach(n -> {
+                    if (n.getTarget() instanceof NameExpr && n.getValue() instanceof MethodCallExpr || n.getValue() instanceof NameExpr) {
+                        Optional<IdentifierNode> var = graphBuilder.getNode(n.getTarget().toString().hashCode());
+                        Optional<IdentifierNode> value = graphBuilder.getNode(((NodeWithSimpleName<?>) n.getValue()).getNameAsString().hashCode());
+                        if (var.isPresent() && value.isPresent()) {
+                            graphBuilder.addEdge(EdgeTypeEnum.DEPENDS_ON.name(), var.get(), value.get());
                         }
-                    } return null;
-                }).filter(Objects::nonNull).collect(Collectors.toList());
-            } return null;
-        }
-
-        boolean isValidIdentifierName(String name) {
-            return Pattern.matches("^([a-zA-Z_$][a-zA-Z\\d_$]*)$", name);
+                    }
+                });
+            }
         }
 
         public String toString() {

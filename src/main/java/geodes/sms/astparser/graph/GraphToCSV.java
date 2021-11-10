@@ -63,9 +63,9 @@ public class GraphToCSV {
         graph.nodes().forEach(n -> {
             try {
                 printer.printRecord(
-                    String.valueOf(n.getId()),
+                    String.valueOf(n.getIdCount()),
                     String.valueOf(n.getLabel()),
-                    String.valueOf(NodeTypeEnum.valueOf(n.getFeature()).getId())
+                    String.valueOf(NodeTypeEnum.valueOf(n.getType()).getId())
                 );
             } catch (IOException e) {
                 e.printStackTrace();
@@ -79,9 +79,9 @@ public class GraphToCSV {
         graph.edges().forEach(e -> {
             try {
                 printer.printRecord(
-                    String.valueOf(RelationEnum.valueOf(e.getValue()).getId()),
-                    String.valueOf(e.getSourceNode().getId()),
-                    String.valueOf(e.getTargetNode().getId())
+                    String.valueOf(EdgeTypeEnum.valueOf(e.getValue()).getId()),
+                    String.valueOf(e.getSourceNode().getIdCount()),
+                    String.valueOf(e.getTargetNode().getIdCount())
                 );
             } catch (IOException ioe) {
                 ioe.printStackTrace();
