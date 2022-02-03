@@ -26,7 +26,7 @@ public class GraphToCSV {
                 .map(p -> {
                     try {
                         BufferedWriter writer = Files.newBufferedWriter(p);
-                        return new CSVPrinter(writer, CSVFormat.DEFAULT);
+                        return new CSVPrinter(writer, CSVFormat.DEFAULT.withDelimiter('|'));
                     } catch (IOException ioe) {
                         ioe.printStackTrace();
                     }

@@ -52,7 +52,6 @@ public class MethodASTParser {
             initCallsArgs();
             initVarAssigns();
             graphBuilder.checkUnconnectedNodes();
-            System.out.println(graphBuilder);
         }
 
         void initMethodParametersNodes() {
